@@ -1,48 +1,48 @@
-# UniFi Cloud MCP (HTTP Streaming) — Node.js
+# UniFi Site Manager MCP (Streamable HTTP) — Node.js
 
-This project runs an MCP server over **HTTP streaming** (FastMCP `httpStream` transport), and exposes a small set of tools that call UniFi's **official Site Manager API**.
+This runs an MCP server over **HTTP streaming** (FastMCP `httpStream`) and implements tools for UniFi's **Site Manager API**.
 
-## Prerequisites
-- A UniFi API key (UniFi Site Manager → API section → Create API key)
-- Docker + Docker Compose
+## Configure
 
-UniFi Site Manager API docs (official):
-- Authentication uses `X-API-Key`
-- Base URL examples use `https://api.ui.com`
-- Example endpoints include `/v1/hosts`, `/v1/sites`, `/v1/devices`
+Create `.env`:
 
-## Run
+```env
+UNIFI_API_KEY=your_key_here
 
-1) Create `.env`:
-
-```bash
-UNIFI_API_KEY=your_api_key_here
-# Optional:
-# MCP_HTTP_PORT=3000
-# MCP_SERVER_PORT=3000
-# MCP_HTTP_ENDPOINT=/mcp
-# UNIFI_API_BASE_URL=https://api.ui.com
-# UNIFI_API_VERSION=v1
+# Optional
+MCP_HTTP_PORT=3000
+MCP_SERVER_PORT=3000
+MCP_HTTP_ENDPOINT=/mcp
+UNIFI_API_BASE_URL=https://api.ui.com
+UNIFI_API_VERSION=v1
 ```
 
-2) Start:
+## Run
 
 ```bash
 docker compose up -d --build
 ```
 
-3) Your MCP server is available at:
+The MCP endpoint will be available at:
 
 - `http://localhost:3000/mcp` (default)
 
-## Tools exposed
-- `health` — simple health check
-- `unifi_list_hosts` — GET `/v1/hosts`
-- `unifi_get_host` — GET `/v1/hosts/{id}`
-- `unifi_list_sites` — GET `/v1/sites`
-- `unifi_list_devices` — GET `/v1/devices`
-- `unifi_request` — generic request tool (GET/POST/PUT/DELETE) against the UniFi API base URL
+## Tools implemented (from the Site Manager API docs)
 
-## Notes
-- The official Site Manager API is currently documented as read-only.
-- If you set `UNIFI_API_VERSION=ea`, the generic tool will target `/ea/...` instead of `/v1/...` when you provide relative paths.
+- `unifi_list_hosts` (GET /v1/hosts) with pagination
+- `unifi_get_host_by_id` (GET /v1/hosts/:id)
+- `unifi_list_sites` (GET /v1/sites) with pagination
+- `unifi_list_devices` (GET /v1/devices) with filters + pagination
+- `unifi_get_isp_metrics` (GET /ea/isp-metrics/:type) with time range params
+- `unifi_query_isp_metrics` (POST /ea/isp-metrics/:type/query)
+- `unifi_list_sdwan_configs` (GET /ea/sd-wan-configs)
+- `unifi_get_sdwan_config_by_id` (GET /ea/sd-wan-configs/:id)
+- `unifi_get_sdwan_config_status` (GET /ea/sd-wan-configs/:id/status)
+
+Plus a generic `unifi_request` tool for ad-hoc calls.
+
+## Open WebUI
+Add an MCP server of type **MCP (Streamable HTTP)** with URL:
+
+- `http://host.docker.internal:3000/mcp` (if Open WebUI is in Docker on the same host)
+- `http://localhost:3000/mcp` (if Open WebUI is running on the host)
