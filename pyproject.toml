@@ -1,0 +1,12 @@
+[project]
+name = "unifi-mcp-http"
+version = "0.1.0"
+description = "MCP Streamable HTTP server for UniFi Site Manager API (cloud)"
+requires-python = ">=3.12"
+dependencies = [
+  "fastmcp>=2.3.0",
+  "httpx>=0.27.0",
+]
+
+[project.scripts]
+unifi-mcp = "unifi_mcp.server:main"
