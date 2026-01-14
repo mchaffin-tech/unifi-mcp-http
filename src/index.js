@@ -197,7 +197,9 @@ function sendJson(res, status, obj) {
 
 function getSessionId(req) {
   // header name is case-insensitive; Node lowercases incoming headers
-  return req.headers["mcp-session-id"];
+  const h = req.headers["mcp-session-id"];
+  if (!h) return undefined;
+  return Array.isArray(h) ? String(h[0]) : String(h);
 }
 
 function isInitialize(body) {
@@ -208,7 +210,8 @@ async function getOrCreateTransport(req, body) {
   const sid = getSessionId(req);
   if (sid && sessions.has(sid)) return sessions.get(sid);
 
-  if (!sid && isInitialize(body)) {
+  // Allow initialize to create a new session even if a sid header is present
+  if (isInitialize(body)) {
     const server = buildMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
