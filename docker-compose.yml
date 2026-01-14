@@ -1,17 +1,22 @@
 version: "3.8"
 
 services:
-  unifi-site-manager-mcp:
+  unifi-cloud-mcp-http:
     build: .
-    container_name: unifi-site-manager-mcp
+    container_name: unifi-cloud-mcp-http
     restart: unless-stopped
-    environment:
-      UNIFI_API_KEY: ${UNIFI_API_KEY:?UNIFI_API_KEY required}
-      UNIFI_BASE_URL: ${UNIFI_BASE_URL:-https://api.ui.com}
-      UNIFI_API_VERSION: ${UNIFI_API_VERSION:-v1}
-      UNIFI_TIMEOUT: ${UNIFI_TIMEOUT:-30}
-
-      MCP_PORT: ${MCP_PORT:-3000}
-      MCP_PATH: ${MCP_PATH:-/mcp}
     ports:
-      - "${MCP_PORT:-3000}:3000"
+      - "${MCP_HTTP_PORT:-3000}:3000"
+    environment:
+      # Required
+      UNIFI_API_KEY: ${UNIFI_API_KEY:?UNIFI_API_KEY required}
+
+      # UniFi Site Manager API base URL (default: https://api.ui.com)
+      UNIFI_API_BASE_URL: ${UNIFI_API_BASE_URL:-https://api.ui.com}
+
+      # FastMCP HTTP streaming transport settings
+      PORT: ${MCP_SERVER_PORT:-3000}
+      MCP_HTTP_ENDPOINT: ${MCP_HTTP_ENDPOINT:-/mcp}
+
+      # Optional: use Early Access API endpoints (EA rate limits differ)
+      UNIFI_API_VERSION: ${UNIFI_API_VERSION:-v1}

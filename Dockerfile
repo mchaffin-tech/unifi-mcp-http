@@ -1,21 +1,17 @@
-FROM python:3.12-slim
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+# syntax=docker/dockerfile:1
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies
-COPY pyproject.toml /app/pyproject.toml
-RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir .
+# Install deps first for better caching
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
 
-# Copy source
-COPY src /app/src
+COPY src ./src
 
-# Non-root user
-RUN useradd -u 1000 -m appuser
-USER appuser
+ENV NODE_ENV=production \
+    PORT=3000
 
 EXPOSE 3000
-CMD ["python", "-m", "unifi_mcp.server"]
+
+CMD ["npm","start"]
