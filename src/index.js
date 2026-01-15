@@ -47,13 +47,15 @@ async function unifiFetch(method, path, { query, body } = {}) {
   const headers = {
     "X-API-Key": API_KEY,
     "Accept": "application/json",
+    "Content-Type": "application/json",
   };
 
   let payload;
   if (body !== undefined && body !== null && method !== "GET" && method !== "HEAD") {
-    headers["Content-Type"] = "application/json";
     payload = JSON.stringify(body);
   }
+
+  console.log(`[UniFi] ${method} ${url.replace(BASE_URL, "")}${payload ? " (body)": ""}`);
 
   const res = await fetch(url, { method, headers, body: payload });
   const contentType = res.headers.get("content-type") || "";
@@ -67,11 +69,14 @@ async function unifiFetch(method, path, { query, body } = {}) {
   }
 
   if (!res.ok) {
+    console.error(`[UniFi] ${res.status} ${res.statusText}`, data);
     const err = new Error(`UniFi API ${res.status} ${res.statusText}`);
     err.status = res.status;
     err.data = data;
     throw err;
   }
+  
+  console.log(`[UniFi] ${res.status} OK`);
   return data;
 }
 
@@ -83,93 +88,184 @@ function asTextResponse(obj) {
 function buildMcpServer() {
   const server = new McpServer({ name: "unifi-cloud-mcp-http", version: "0.3.1" });
 
-  server.tool("health", {}, async () => asTextResponse({ status: "ok", baseUrl: BASE_URL }));
+  server.tool("health", {}, async () => {
+    console.log("[MCP] health check");
+    return asTextResponse({ status: "ok", baseUrl: BASE_URL, timestamp: new Date().toISOString() });
+  });
 
   server.tool(
     "unifi_list_hosts",
     {
-      pageSize: z.string().optional(),
-      nextToken: z.string().optional(),
+      pageSize: z.string().optional().describe("Number of results per page (default: 20)"),
+      nextToken: z.string().optional().describe("Token from previous response for pagination"),
     },
-    async (args) => asTextResponse(await unifiFetch("GET", "/v1/hosts", { query: args }))
+    async (args) => {
+      console.log("[API] GET /v1/hosts", args);
+      try {
+        const data = await unifiFetch("GET", "/v1/hosts", { query: args });
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /v1/hosts failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   server.tool(
     "unifi_get_host_by_id",
-    { id: z.string().min(1) },
-    async ({ id }) => asTextResponse(await unifiFetch("GET", `/v1/hosts/${encodeURIComponent(id)}`))
+    { id: z.string().min(1).describe("Host ID to retrieve details for") },
+    async ({ id }) => {
+      console.log("[API] GET /v1/hosts/:id", { id });
+      try {
+        const data = await unifiFetch("GET", `/v1/hosts/${encodeURIComponent(id)}`);
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /v1/hosts/:id failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   server.tool(
     "unifi_list_sites",
     {
-      pageSize: z.string().optional(),
-      nextToken: z.string().optional(),
+      pageSize: z.string().optional().describe("Number of results per page (default: 20)"),
+      nextToken: z.string().optional().describe("Token from previous response for pagination"),
     },
-    async (args) => asTextResponse(await unifiFetch("GET", "/v1/sites", { query: args }))
+    async (args) => {
+      console.log("[API] GET /v1/sites", args);
+      try {
+        const data = await unifiFetch("GET", "/v1/sites", { query: args });
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /v1/sites failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   server.tool(
     "unifi_list_devices",
     {
-      hostIds: z.array(z.string()).optional(),
-      time: z.string().optional(),
-      pageSize: z.string().optional(),
-      nextToken: z.string().optional(),
+      hostIds: z.array(z.string()).optional().describe("Filter by host IDs"),
+      time: z.string().optional().describe("Time parameter for device metrics"),
+      pageSize: z.string().optional().describe("Number of results per page (default: 20)"),
+      nextToken: z.string().optional().describe("Token from previous response for pagination"),
     },
-    async (args) => asTextResponse(await unifiFetch("GET", "/v1/devices", { query: args }))
+    async (args) => {
+      console.log("[API] GET /v1/devices", args);
+      try {
+        const data = await unifiFetch("GET", "/v1/devices", { query: args });
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /v1/devices failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   server.tool(
     "unifi_get_isp_metrics",
     {
-      type: z.enum(["5m", "1h"]),
-      beginTimestamp: z.string().optional(),
-      endTimestamp: z.string().optional(),
-      duration: z.enum(["24h", "7d", "30d"]).optional(),
+      type: z.enum(["5m", "1h"]).describe("Metric type: 5m or 1h aggregation"),
+      beginTimestamp: z.string().optional().describe("Start time (RFC3339 or epoch milliseconds)"),
+      endTimestamp: z.string().optional().describe("End time (RFC3339 or epoch milliseconds)"),
+      duration: z.enum(["24h", "7d", "30d"]).optional().describe("Preset duration (overrides begin/endTimestamp)"),
     },
     async ({ type, beginTimestamp, endTimestamp, duration }) => {
       const query = { beginTimestamp, endTimestamp, duration };
-      return asTextResponse(await unifiFetch("GET", `/ea/isp-metrics/${type}`, { query }));
+      console.log("[API] GET /ea/isp-metrics/:type", { type, ...query });
+      try {
+        const data = await unifiFetch("GET", `/ea/isp-metrics/${type}`, { query });
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /ea/isp-metrics/:type failed:", e.message, e.data);
+        throw e;
+      }
     }
   );
 
   server.tool(
     "unifi_query_isp_metrics",
     {
-      type: z.enum(["5m", "1h"]),
-      sites: z.array(z.object({ siteId: z.string().min(1) }).passthrough()),
+      type: z.enum(["5m", "1h"]).describe("Metric type: 5m or 1h aggregation"),
+      sites: z.array(z.object({ siteId: z.string().min(1) }).passthrough()).describe("Array of site objects with siteId"),
     },
-    async ({ type, sites }) =>
-      asTextResponse(await unifiFetch("POST", `/ea/isp-metrics/${type}/query`, { body: { sites } }))
+    async ({ type, sites }) => {
+      console.log("[API] POST /ea/isp-metrics/:type/query", { type, sites });
+      try {
+        const data = await unifiFetch("POST", `/ea/isp-metrics/${type}/query`, { body: { sites } });
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] POST /ea/isp-metrics/:type/query failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
-  server.tool("unifi_list_sdwan_configs", {}, async () =>
-    asTextResponse(await unifiFetch("GET", "/ea/sd-wan-configs"))
+  server.tool(
+    "unifi_list_sdwan_configs",
+    {},
+    async () => {
+      console.log("[API] GET /ea/sd-wan-configs");
+      try {
+        const data = await unifiFetch("GET", "/ea/sd-wan-configs");
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /ea/sd-wan-configs failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   server.tool(
     "unifi_get_sdwan_config_by_id",
-    { id: z.string().min(1) },
-    async ({ id }) => asTextResponse(await unifiFetch("GET", `/ea/sd-wan-configs/${encodeURIComponent(id)}`))
+    { id: z.string().min(1).describe("SD-WAN config ID") },
+    async ({ id }) => {
+      console.log("[API] GET /ea/sd-wan-configs/:id", { id });
+      try {
+        const data = await unifiFetch("GET", `/ea/sd-wan-configs/${encodeURIComponent(id)}`);
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /ea/sd-wan-configs/:id failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   server.tool(
     "unifi_get_sdwan_config_status",
-    { id: z.string().min(1) },
-    async ({ id }) =>
-      asTextResponse(await unifiFetch("GET", `/ea/sd-wan-configs/${encodeURIComponent(id)}/status`))
+    { id: z.string().min(1).describe("SD-WAN config ID") },
+    async ({ id }) => {
+      console.log("[API] GET /ea/sd-wan-configs/:id/status", { id });
+      try {
+        const data = await unifiFetch("GET", `/ea/sd-wan-configs/${encodeURIComponent(id)}/status`);
+        return asTextResponse(data);
+      } catch (e) {
+        console.error("[API] GET /ea/sd-wan-configs/:id/status failed:", e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   server.tool(
     "unifi_request",
     {
-      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"),
-      path: z.string().min(1),
-      query: z.record(z.any()).optional(),
-      body: z.any().optional(),
+      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET").describe("HTTP method"),
+      path: z.string().min(1).describe("API path (e.g., /v1/hosts or /ea/isp-metrics/5m)"),
+      query: z.record(z.any()).optional().describe("Query parameters object"),
+      body: z.any().optional().describe("Request body for POST/PUT/PATCH"),
     },
-    async ({ method, path, query, body }) => asTextResponse(await unifiFetch(method, path, { query, body }))
+    async ({ method, path, query, body }) => {
+      console.log("[API]", method, path, query || body ? { query, body } : "");
+      try {
+        const data = await unifiFetch(method, path, { query, body });
+        return asTextResponse(data);
+      } catch (e) {
+        console.error(`[API] ${method} ${path} failed:`, e.message, e.data);
+        throw e;
+      }
+    }
   );
 
   return server;
@@ -208,10 +304,14 @@ function isInitialize(body) {
 
 async function getOrCreateTransport(req, body) {
   const sid = getSessionId(req);
-  if (sid && sessions.has(sid)) return sessions.get(sid);
+  if (sid && sessions.has(sid)) {
+    console.log(`[Session] Reusing session ${sid}`);
+    return sessions.get(sid);
+  }
 
   // Allow initialize to create a new session even if a sid header is present
   if (isInitialize(body)) {
+    console.log("[Session] Creating new session (initialize)");
     const server = buildMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
@@ -232,12 +332,14 @@ const httpServer = http.createServer(async (req, res) => {
   const method = (req.method || "GET").toUpperCase();
   const body = method === "POST" ? await readBody(req) : undefined;
 
+  console.log(`[HTTP] ${method} ${req.url}${body ? " (data)" : ""}`);
+
   const sessionObj = await getOrCreateTransport(req, body);
   if (!sessionObj) {
-    return sendJson(res, 400, {
-      error:
-        "No active session. Open WebUI should POST initialize first; subsequent calls must include Mcp-Session-Id header.",
-    });
+    const msg =
+      "No active session. Open WebUI should POST initialize first; subsequent calls must include Mcp-Session-Id header.";
+    console.error("[Session] Error:", msg);
+    return sendJson(res, 400, { error: msg });
   }
 
   const { transport } = sessionObj;
@@ -248,13 +350,20 @@ const httpServer = http.createServer(async (req, res) => {
     // On initialize, the transport sets the session header on the response.
     if (sessionObj.isNew) {
       const newSid = res.getHeader("mcp-session-id");
-      if (newSid) sessions.set(String(newSid), { transport: sessionObj.transport, server: sessionObj.server });
+      if (newSid) {
+        const sidStr = String(newSid);
+        sessions.set(sidStr, { transport: sessionObj.transport, server: sessionObj.server });
+        console.log(`[Session] New session created: ${sidStr}`);
+      }
     }
   } catch (e) {
+    console.error("[HTTP] Error:", e.message);
     return sendJson(res, 500, { error: String(e?.message || e) });
   }
 });
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`MCP Streamable HTTP listening on http://0.0.0.0:${PORT}${ENDPOINT}`);
+  console.log(`MCP Server: http://0.0.0.0:${PORT}${ENDPOINT}`);
+  console.log(`UniFi API: ${BASE_URL}`);
+  console.log("Ready for connections from Open Web UI or ChatGPT");
 });
